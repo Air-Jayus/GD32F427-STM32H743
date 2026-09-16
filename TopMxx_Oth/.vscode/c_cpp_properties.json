@@ -1,0 +1,40 @@
+{
+    "configurations": [
+        {
+            "name": "GD32F427",
+            "includePath": [
+                "${workspaceFolder}",
+                "${workspaceFolder}/Action",
+                "${workspaceFolder}/Application",
+                "${workspaceFolder}/Driver",
+                "${workspaceFolder}/Parameter",
+                "${workspaceFolder}/GD32F4xx_Firmware_Library/CMSIS",
+                "${workspaceFolder}/GD32F4xx_Firmware_Library/CMSIS/GD/GD32F4xx/Include",
+                "${workspaceFolder}/GD32F4xx_Firmware_Library/GD32F4xx_standard_peripheral/Include",
+                "${workspaceFolder}/GD32F4xx_Firmware_Library/GD32F4xx_usb_library/device/class/audio/Include",
+                "${workspaceFolder}/GD32F4xx_Firmware_Library/GD32F4xx_usb_library/device/class/cdc/Include",
+                "${workspaceFolder}/GD32F4xx_Firmware_Library/GD32F4xx_usb_library/device/class/dfu/Include",
+                "${workspaceFolder}/GD32F4xx_Firmware_Library/GD32F4xx_usb_library/device/class/hid/Include",
+                "${workspaceFolder}/GD32F4xx_Firmware_Library/GD32F4xx_usb_library/device/class/iap/Include",
+                "${workspaceFolder}/GD32F4xx_Firmware_Library/GD32F4xx_usb_library/device/class/msc/Include",
+                "${workspaceFolder}/GD32F4xx_Firmware_Library/GD32F4xx_usb_library/device/class/printer/Include",
+                "${workspaceFolder}/GD32F4xx_Firmware_Library/GD32F4xx_usb_library/device/core/Include",
+                "${workspaceFolder}/GD32F4xx_Firmware_Library/GD32F4xx_usb_library/driver/Include",
+                "${workspaceFolder}/GD32F4xx_Firmware_Library/GD32F4xx_usb_library/host/class/hid/Include",
+                "${workspaceFolder}/GD32F4xx_Firmware_Library/GD32F4xx_usb_library/host/class/msc/Include",
+                "${workspaceFolder}/GD32F4xx_Firmware_Library/GD32F4xx_usb_library/host/core/Include",
+                "${workspaceFolder}/GD32F4xx_Firmware_Library/GD32F4xx_usb_library/ustd/common",
+                "${workspaceFolder}/MDK-ARM/RTE/_GD32427R_START",
+                "${workspaceFolder}/MDK-ARM/RTE/_TopMxx"
+            ],
+            "defines": [
+                "GD32F427",
+                "USE_STDPERIPH_DRIVER"
+            ],
+            "intelliSenseMode": "gcc-arm",
+            "cStandard": "c99",
+            "cppStandard": "c++14"
+        }
+    ],
+    "version": 4
+}

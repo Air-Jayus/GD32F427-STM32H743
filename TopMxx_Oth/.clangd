@@ -1,0 +1,13 @@
+CompileFlags:
+  Add:
+    - --target=arm-none-eabi
+    - -std=c99
+    - -mcpu=cortex-m4
+    - -mthumb
+    - -DGD32F427
+    - -DUSE_STDPERIPH_DRIVER
+  Compiler: clang
+Index:
+  StandardLibrary: No
+InlayHints:
+  Enabled: No
