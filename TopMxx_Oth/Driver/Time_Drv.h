@@ -40,13 +40,13 @@
 #endif
 
 /*========================================= 全局有效宏定义 ========================================*/
-#define SysTime			TIMER_CNT(TIMER1)	     //系统时间		实际直接使用Tim2中的值，计时单位10us
+#define SysTime			TIM2->CNT	     //系统时间	直接读TIM2的CNT，计时单位10us
 #define GetSysTime()	SysTime		   //读取系统时间
 
-#define mTimer2Clk			100000		 //Tim2的时钟频率	100kHz	10us
-#define mTimer2Max			0					 //Tim2计数最大值	实际上是0x100000000，但溢出变0
+#define mTimer2Clk			100000		 //TIM2计数频率	100kHz	10us
+#define mTimer2Max			0					 //TIM2计数最大值	实际上是0x100000000，但溢出变0
 
-#define Get10nSTime()		TIMER_CNT(TIMER4)	 //TIM5设置到100MHz计数，计时单位10ns
+#define Get10nSTime()		TIM5->CNT	 //TIM5设置到100MHz计数，计时单位10ns
 
 #define mTime1ms_Period		(mTimer2Clk/1000*  1)	//  1ms定时周期
 #define mTime2ms_Period		(mTimer2Clk/1000*  2)	//  2ms定时周期

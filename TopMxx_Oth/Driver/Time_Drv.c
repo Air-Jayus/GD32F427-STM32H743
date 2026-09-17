@@ -20,8 +20,8 @@
 修改说明：
 ======================================== 其   它    说   明 ========================================
 ##系统资源
-1、TIMER1\TIMER4及其匹配寄存器。
-2、TIMER0中断
+1、STM32H743 TIM2\TIM5及其匹配寄存器。（GD32原工程为TIMER1\TIMER4）
+2、TIM2中断
 
 ##其它说明
 1、本文件中驱动比较特殊，独立性较差，定时比较中断与其它驱动可能存在配合关系。
@@ -29,7 +29,7 @@
 3、定时器的定时单位10us，最大12.7h，各时间计算均以其为参考。
 4、由于主循环周期不固定，为保证动作中延迟等的时间精度，不采用给出定时中断标志并以其为计时基础的方式，而采用
    保存系统时间（CNT），然后通过计算某时刻与系统时间差值的方式，来得到准确的经过时间。
-5、本文件产生2ms定时中断。
+5、本文件预留TIM2匹配中断（当前未启用）。
 6、本文件还定义计时器及其操作方法函数，需要注意使用时操作顺序。
 
 ****************************************************************************************************/
@@ -70,177 +70,65 @@ int main(void)
 
 /****************************************************************************************************
 函数名称：Time驱动初始化
-函数说明：Timer2及其中断相关初始化
+函数说明：TIM2及其中断相关初始化
 输入参数：
 返 回 值：
 其    它：
-1)Timer2以10us为单位计时，计时不复位，即计时在0～0xffffffff循环
-2)TIM2,TIM5的时钟为APB1的两倍，即100M。APB1为50M，APB2为100M。
+1)TIM2以10us为单位计时，计时不复位，即计时在0～0xffffffff循环
+2)TIMPRE=×4，PCLK1=50MHz→定时器内核时钟200MHz。TIM2 PSC=2000→100kHz(10us)，TIM5 PSC=2→100MHz(10ns)。
 ****************************************************************************************************/
 void Time_Drv_Init(void)
-{	
-	timer_parameter_struct timer_initpara;    
-    //timer_oc_parameter_struct timer_ocintpara;
+{
+	//TIM2初始化，10us定时器（GD32原工程为TIMER1）
+	LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_TIM2);
+    LL_RCC_SetTIMPrescaler(LL_RCC_TIM_PRESCALER_FOUR_TIMES);
+    LL_TIM_DeInit(TIM2);
     
-	//定时器1初始化，10us定时器
-	rcu_periph_clock_enable(RCU_TIMER1);
-    rcu_timer_clock_prescaler_config(RCU_TIMER_PSC_MUL4);
-    timer_struct_para_init(&timer_initpara);
-    timer_deinit(TIMER1);
-    
-    timer_initpara.prescaler         = 2000-1;
-    timer_initpara.alignedmode       = TIMER_COUNTER_EDGE;
-    timer_initpara.counterdirection  = TIMER_COUNTER_UP;
-    timer_initpara.period            = 0xffffffff;
-    timer_initpara.clockdivision     = TIMER_CKDIV_DIV1;
-    timer_initpara.repetitioncounter = 0;
-    timer_init(TIMER1,&timer_initpara);
-    //匹配中断设置
-    /*timer_channel_output_struct_para_init(&timer_ocintpara);
-    timer_ocintpara.ocpolarity  = TIMER_OC_POLARITY_HIGH;
-    timer_ocintpara.outputstate = TIMER_CCX_ENABLE;
-    timer_ocintpara.ocnpolarity  = TIMER_OCN_POLARITY_HIGH;
-    timer_ocintpara.outputnstate = TIMER_CCXN_DISABLE;
-    timer_ocintpara.ocidlestate  = TIMER_OC_IDLE_STATE_LOW;
-    timer_ocintpara.ocnidlestate = TIMER_OCN_IDLE_STATE_LOW;
-    timer_channel_output_config(TIMER1,TIMER_CH_0,&timer_ocintpara);
-    //设置通道0的比较值
-    timer_channel_output_pulse_value_config(TIMER1, TIMER_CH_0, 2000);
-    timer_channel_output_mode_config(TIMER1, TIMER_CH_0, TIMER_OC_MODE_PWM0);
-    timer_channel_output_shadow_config(TIMER1, TIMER_CH_0, TIMER_OC_SHADOW_DISABLE);
-    
-    // 启用定时器更新中断和通道1匹配中断
-    //timer_interrupt_enable(TIMERx, TIMER_INT_UP);
-    timer_interrupt_enable(TIMER1, TIMER_INT_CH0);
-    
-    // 配置NVIC
-    nvic_irq_enable(TIMER1_IRQn, 2, 0);
-    */
-    /* auto-reload preload enable */
-    //timer_auto_reload_shadow_enable(TIMER1);
-    /* TIMER1 enable */
-    timer_enable(TIMER1);
+    LL_TIM_SetPrescaler(TIM2, 2000U - 1U);
+    LL_TIM_SetCounterMode(TIM2, LL_TIM_COUNTERMODE_UP);
+    LL_TIM_SetAutoReload(TIM2, 0xFFFFFFFFUL);
+    LL_TIM_SetClockDivision(TIM2, LL_TIM_CLOCKDIVISION_DIV1);
+    LL_TIM_GenerateEvent_UPDATE(TIM2);
+    /* TIM2使能 */
+    LL_TIM_EnableCounter(TIM2);
   	
-	//定时器4初始化，10ns定时器
-	rcu_periph_clock_enable(RCU_TIMER4);
-    rcu_timer_clock_prescaler_config(RCU_TIMER_PSC_MUL4);
-    timer_struct_para_init(&timer_initpara);
-    timer_deinit(TIMER4);
+	//TIM5初始化，10ns定时器
+	LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_TIM5);
+    LL_RCC_SetTIMPrescaler(LL_RCC_TIM_PRESCALER_FOUR_TIMES);
+    LL_TIM_DeInit(TIM5);
     
-    timer_initpara.prescaler         = 2-1;
-    timer_initpara.alignedmode       = TIMER_COUNTER_EDGE;
-    timer_initpara.counterdirection  = TIMER_COUNTER_UP;
-    timer_initpara.period            = 0xffffffff;
-    timer_initpara.clockdivision     = TIMER_CKDIV_DIV1;
-    timer_initpara.repetitioncounter = 0;
-    timer_init(TIMER4,&timer_initpara);
+    LL_TIM_SetPrescaler(TIM5, 2U - 1U);
+    LL_TIM_SetCounterMode(TIM5, LL_TIM_COUNTERMODE_UP);
+    LL_TIM_SetAutoReload(TIM5, 0xFFFFFFFFUL);
+    LL_TIM_SetClockDivision(TIM5, LL_TIM_CLOCKDIVISION_DIV1);
+    LL_TIM_GenerateEvent_UPDATE(TIM5);
     
-    /* auto-reload preload enable */
-    timer_auto_reload_shadow_enable(TIMER4);
-    /* TIMER1 enable */
-    timer_enable(TIMER4);
-    
-    //定时器2配置成PWM输出  PC6、PC7、PC8、PC9输出IO
-    /*rcu_periph_clock_enable(RCU_GPIOC);
-    
-    gpio_mode_set(GPIOC, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO_PIN_6);
-    gpio_output_options_set(GPIOC, GPIO_OTYPE_PP, GPIO_OSPEED_50MHZ, GPIO_PIN_6);
-    gpio_af_set(GPIOC, GPIO_AF_2,GPIO_PIN_6);
-    
-    gpio_mode_set(GPIOC, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO_PIN_7);
-    gpio_output_options_set(GPIOC, GPIO_OTYPE_PP, GPIO_OSPEED_50MHZ, GPIO_PIN_7);
-    gpio_af_set(GPIOC, GPIO_AF_2,GPIO_PIN_7);
-    
-    gpio_mode_set(GPIOC, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO_PIN_8);
-    gpio_output_options_set(GPIOC, GPIO_OTYPE_PP, GPIO_OSPEED_50MHZ, GPIO_PIN_8);
-    gpio_af_set(GPIOC, GPIO_AF_2,GPIO_PIN_8);
-    
-    gpio_mode_set(GPIOC, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO_PIN_9);
-    gpio_output_options_set(GPIOC, GPIO_OTYPE_PP, GPIO_OSPEED_50MHZ, GPIO_PIN_9);
-    gpio_af_set(GPIOC, GPIO_AF_2,GPIO_PIN_9);
-    
-    //定时器2初始化
-	rcu_periph_clock_enable(RCU_TIMER2);
-    rcu_timer_clock_prescaler_config(RCU_TIMER_PSC_MUL4);
-    timer_struct_para_init(&timer_initpara);
-    timer_deinit(TIMER2);
-    // TIMER2 configuration 
-    timer_initpara.prescaler         = 400-1; //200M/4=50MHz
-    timer_initpara.alignedmode       = TIMER_COUNTER_EDGE;
-    timer_initpara.counterdirection  = TIMER_COUNTER_UP;
-    timer_initpara.period            = 5000-1;
-    timer_initpara.clockdivision     = TIMER_CKDIV_DIV1;
-    timer_initpara.repetitioncounter = 0;
-    timer_init(TIMER2,&timer_initpara);
-
-    // CH0-3 configuration in PWM mode 0 
-    timer_channel_output_struct_para_init(&timer_ocintpara);
-    timer_ocintpara.ocpolarity  = TIMER_OC_POLARITY_HIGH;
-    timer_ocintpara.outputstate = TIMER_CCX_ENABLE;
-    timer_ocintpara.ocnpolarity  = TIMER_OCN_POLARITY_HIGH;
-    timer_ocintpara.outputnstate = TIMER_CCXN_DISABLE;
-    timer_ocintpara.ocidlestate  = TIMER_OC_IDLE_STATE_LOW;
-    timer_ocintpara.ocnidlestate = TIMER_OCN_IDLE_STATE_LOW;
-
-    timer_channel_output_config(TIMER2,TIMER_CH_0,&timer_ocintpara);
-    timer_channel_output_config(TIMER2,TIMER_CH_1,&timer_ocintpara);
-    timer_channel_output_config(TIMER2,TIMER_CH_2,&timer_ocintpara);
-    timer_channel_output_config(TIMER2,TIMER_CH_3,&timer_ocintpara);
-
-    // CH0-3 configuration in PWM mode 0,duty cycle 25%~ 
-    timer_channel_output_mode_config(TIMER2,TIMER_CH_0,TIMER_OC_MODE_PWM0);
-    timer_channel_output_shadow_config(TIMER2,TIMER_CH_0,TIMER_OC_SHADOW_DISABLE);
-    
-    timer_channel_output_mode_config(TIMER2,TIMER_CH_1,TIMER_OC_MODE_PWM0);
-    timer_channel_output_shadow_config(TIMER2,TIMER_CH_1,TIMER_OC_SHADOW_DISABLE);
-    
-    timer_channel_output_mode_config(TIMER2,TIMER_CH_2,TIMER_OC_MODE_PWM0);
-    timer_channel_output_shadow_config(TIMER2,TIMER_CH_2,TIMER_OC_SHADOW_DISABLE);
-    
-    timer_channel_output_mode_config(TIMER2,TIMER_CH_3,TIMER_OC_MODE_PWM0);
-    timer_channel_output_shadow_config(TIMER2,TIMER_CH_3,TIMER_OC_SHADOW_DISABLE);
-    
-    timer_channel_output_pulse_value_config(TIMER2,TIMER_CH_0,2500);
-    timer_channel_output_pulse_value_config(TIMER2,TIMER_CH_1,2500);
-    timer_channel_output_pulse_value_config(TIMER2,TIMER_CH_2,2500);
-    timer_channel_output_pulse_value_config(TIMER2,TIMER_CH_3,2500);
-    
-    // auto-reload preload enable 
-    timer_auto_reload_shadow_enable(TIMER2);
-    // TIMER2 enable 
-    timer_enable(TIMER2);*/
+    /* 自动重装载影子寄存器使能 */
+    LL_TIM_EnableARRPreload(TIM5);
+    /* TIM5使能 */
+    LL_TIM_EnableCounter(TIM5);
 }
 /****************************************************************************************************
-函数名称：Time2相关中断
+函数名称：TIM2相关中断
 函数说明：
 输入参数：
 返 回 值：
 其    它：
-1)调试过程中，如果断点设在本中断函数中，会出现计时中断失效的情况，这是由于Timer3在程序中断时计数不停所致。
-2)中断周期为2ms。
+1)调试过程中，如果断点设在本中断函数中，会出现计时中断失效的情况，这是由于TIM2在程序中断时计数不停所致。
+2)当前中断未启用，为预留功能。
 ****************************************************************************************************/
-void TIMER1_IRQHandler(void)
+void TIM2_IRQHandler(void)
 {
-    // 检查更新中断标志
-    /*if(SET == timer_interrupt_flag_get(TIMERx, TIMER_INT_FLAG_UP)) 
-    {
-        timer_interrupt_count++;
-        // 清除中断标志
-        timer_interrupt_flag_clear(TIMERx, TIMER_INT_FLAG_UP);
-    }*/
-    
     // 检查通道1匹配中断标志
-    if(SET == timer_interrupt_flag_get(TIMER1, TIMER_INT_FLAG_CH0)) 
+    if((SET == LL_TIM_IsActiveFlag_CC1(TIM2)) && (SET == LL_TIM_IsEnabledIT_CC1(TIM2)))
     {
-        TIMER_CH0CV(TIMER1)=TIMER_CH0CV(TIMER1)+100000;
-        // 清除中断标志
-        timer_interrupt_flag_clear(TIMER1, TIMER_INT_FLAG_CH0);
+        TIM2->CCR1 = TIM2->CCR1 + 100000U;
+        LL_TIM_ClearFlag_CC1(TIM2);
     }
-    
+
     // 错误处理：检查定时器错误标志
-    if(SET == timer_flag_get(TIMER1, TIMER_FLAG_CH0O)) {
-        // 处理通道1溢出错误
-        timer_flag_clear(TIMER1, TIMER_FLAG_CH0O);
+    if(SET == LL_TIM_IsActiveFlag_CC1OVR(TIM2)) {
+        LL_TIM_ClearFlag_CC1OVR(TIM2);
     }
 }
 /****************************************************************************************************
@@ -665,26 +553,7 @@ U32 RunTimeMeas_10us(Bool MeasStartFlag)
 ****************************************************************************************************/
 void clock_output_config(void)
 {
-    /* peripheral clock enable */
-    rcu_periph_clock_enable(RCU_GPIOA);
-    rcu_periph_clock_enable(RCU_PMU);
-    //rcu_plli2s_config(200, 2);
-    //rcu_osci_on(RCU_PLLI2S_CK);
-    
-    /* backup domain write enable */
-    /*pmu_backup_write_enable();
-    rcu_lxtal_drive_capability_config(RCU_LXTALDRI_HIGHER_DRIVE);
-    rcu_osci_on(RCU_LXTAL);
-    */
-    /* configure clock output pin */
-    gpio_mode_set(GPIOA, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO_PIN_8);
-    //gpio_mode_set(GPIOC, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO_PIN_9);
-    gpio_output_options_set(GPIOA, GPIO_OTYPE_PP, GPIO_OSPEED_MAX, GPIO_PIN_8);
-    //gpio_output_options_set(GPIOC, GPIO_OTYPE_PP, GPIO_OSPEED_MAX, GPIO_PIN_9);
-    gpio_af_set(GPIOA, GPIO_AF_0, GPIO_PIN_8);
-    //gpio_af_set(GPIOC, GPIO_AF_0, GPIO_PIN_9);
-    
-    rcu_ckout0_config(RCU_CKOUT0SRC_PLLP, RCU_CKOUT0_DIV2);	//CLK0从主时钟，2分频
+    /* STM32H743移植：PA8 MCO时钟输出不再使用（原GD32工程用于模拟总线时钟） */
 }
 
 
