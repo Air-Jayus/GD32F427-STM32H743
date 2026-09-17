@@ -36,10 +36,10 @@
 #define mDLD_AllOff	0xFF		//显示全灭
 #define	mDLD_AllOn	0x00		//显示全亮
 
-#define H164CLK_L  GPIO_BC(GPIOB)	=mBit14		//引脚PB14置低
-#define H164CLK_H  GPIO_BOP(GPIOB)	=mBit14		//引脚PB14置高
-#define H164DAT_L  GPIO_BC(GPIOB)	=mBit15		//引脚PB15置低
-#define H164DAT_H  GPIO_BOP(GPIOB)	=mBit15     //引脚PB15置高
+#define H164CLK_L  GPIOD->BSRR=((U32)mBit13<<16)		//引脚PD13置低
+#define H164CLK_H  GPIOD->BSRR=mBit13					//引脚PD13置高
+#define H164DAT_L  GPIOD->BSRR=((U32)mBit14<<16)		//引脚PD14置低
+#define H164DAT_H  GPIOD->BSRR=mBit14					//引脚PD14置高
 /*======================================= 模块内有效变量定义 ======================================*/
 U8 const DigiLedDispTab[]={ 	//数码LED显示转换表	0-F
   0xC0,0xF9,0xA4,0xB0,0x99,0x92,0x82,0xF8,0x80,0x90,0x88,0x83,0xC6,0xA1,0x86,0x8E};
@@ -72,10 +72,17 @@ int main(void)
 ****************************************************************************************************/
 void DigiLed_Init(void)
 {
-	//管脚
- 	rcu_periph_clock_enable(RCU_GPIOB);   	//使能PORTD口时钟  
- 	gpio_mode_set(GPIOB, GPIO_MODE_OUTPUT, GPIO_PUPD_PULLUP, mBit14|mBit15);
-    gpio_output_options_set(GPIOB, GPIO_OTYPE_PP, GPIO_OSPEED_50MHZ,mBit14|mBit15);
+	LL_GPIO_InitTypeDef GPIO_InitStruct = {0};
+
+	// 使能GPIOD时钟
+ 	LL_AHB4_GRP1_EnableClock(LL_AHB4_GRP1_PERIPH_GPIOD);
+	// PD13(CLK)、PD14(DAT) 推挽输出，上拉，高速
+ 	GPIO_InitStruct.Pin = LL_GPIO_PIN_13|LL_GPIO_PIN_14;
+ 	GPIO_InitStruct.Mode = LL_GPIO_MODE_OUTPUT;
+ 	GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_VERY_HIGH;
+ 	GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
+ 	GPIO_InitStruct.Pull = LL_GPIO_PULL_UP;
+ 	LL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 	DigiLedOut(mDLD_AllOn);//全亮
 }
 /****************************************************************************************************
@@ -152,11 +159,5 @@ void DigiLedOut(U8 data)
 		H164CLK_H;
 		__NOP();
 		data=data<<1;
-	}	
+	}
 }
-/****************************************************************************************************
-以下是应用级驱动函数：基于部分硬件完成应用功能
-****************************************************************************************************/
-/****************************************************************************************************
-以下是硬件级驱动函数：完全基于硬件
-****************************************************************************************************/
