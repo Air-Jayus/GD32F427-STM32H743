@@ -68,7 +68,7 @@ AD7689性能测试：
 
 #include "Include.h"
 /*======================================== 模块内有效宏定义 =======================================*/
-#define	mHadcSPI	SPI2
+#define	mHadcSPI	SPI3				/* GD32原工程为SPI2（APB1+0x3C00），H743同地址为SPI3 */
 
 //#define mSPI_BPS			800000		//SPI-SCK频率	当mPCLK_SPI为24MHz时，范围3MHz～93.75KHz
 #define	mHADCChanMax		8	    //最大通道数
@@ -76,8 +76,8 @@ AD7689性能测试：
 
 #define mHADCTimer_5us		500			//100M	5us定时
 
-#define AD768x_CS_Set() 	GPIO_BOP(GPIOA)=mBit4								//GPIOA4 CS 置高
-#define AD768x_CS_Clr()		GPIO_BOP(GPIOA)=((U32)mBit4<<16)		//GPIOA4 CS 置低
+#define AD768x_CS_Set() 	GPIOA->BSRR=mBit4								//GPIOA4 CS 置高
+#define AD768x_CS_Clr()		GPIOA->BSRR=((U32)mBit4<<16)		//GPIOA4 CS 置低
 
 //AD7689相关宏定义
 //AD768x相关宏定义
@@ -165,14 +165,14 @@ void HADC_Drv_Pcs(void)
 	{	
 		if(HADC_NewADCFlag[i]!=LastHADC_NewADCFlag[i])
 		{	//数据已经更新
-			DisPerIRQ(SPI2_IRQn);				//关闭HADC相关定时器中断
+			DisPerIRQ(SPI3_IRQn);				//关闭HADC相关定时器中断
 			LastHADC_NewADCFlag[i]=HADC_NewADCFlag[i];
 			
 			//滤波:对指定窗口大小的数据取平均值
 			HadcDataSum=HADC_ADCBuff[i][0];
 			for(j=1;j<mChanFilteNum;j++)
 				HadcDataSum+=(U32)HADC_ADCBuff[i][j];
-			EnPerIRQ(SPI2_IRQn);						//开启中断
+			EnPerIRQ(SPI3_IRQn);						//开启中断
 			//写入资源		以16位AD值形式
 			WrResU32(HardConf[mHard_HAD01+i],HadcDataSum/mChanFilteNum);	
 		}
@@ -209,13 +209,13 @@ void HADC_Drv_Pcs(void)
 	//通道数检查
 	if(HADC_UseChanNum!=HardConf_HADNum)
 	{	//通道数发生变化 	通常是进行了重置
-		DisPerIRQ(SPI2_IRQn);										//关闭中断
+		DisPerIRQ(SPI3_IRQn);										//关闭中断
 		HADC_UseChanNum=HardConf_HADNum;							//通道数
 		if((HADC_UseChanNum==0)||(HADC_UseChanNum>mHADCChanMax))
 			HADC_UseChanNum=mHADCChanMax;
 		for(i=0;i<HADC_UseChanNum;i++)	HADC_NextSeq[i]=i;			//转换队列
 		for(;i<mSeqLen;i++)				HADC_NextSeq[i]=mSeqEnd;	//队列结束
-		EnPerIRQ(SPI2_IRQn);											//开启中断
+		EnPerIRQ(SPI3_IRQn);											//开启中断
 	}
 }
 /****************************************************************************************************
@@ -231,10 +231,10 @@ Bool HADC_PriReq(U16 ResSn)
 
 	if(ResSn==mHADCPR_DefSeq)	
 	{	//恢复默认序列
-		DisPerIRQ(SPI2_IRQn);										//关闭中断
+		DisPerIRQ(SPI3_IRQn);										//关闭中断
 		for(i=0;i<HADC_UseChanNum;i++)	HADC_NextSeq[i]=i;			//转换队列
 		for(;i<mSeqLen;i++)				HADC_NextSeq[i]=mSeqEnd;	//队列结束
-		EnPerIRQ(SPI2_IRQn);											//开启中断
+		EnPerIRQ(SPI3_IRQn);											//开启中断
 	
 		return mTrue;
 	}
@@ -247,7 +247,7 @@ Bool HADC_PriReq(U16 ResSn)
 			if(Para_HADPriNum==0)
 			{	//1路优先级
 				
-				DisPerIRQ(SPI2_IRQn);			//关闭中断	
+				DisPerIRQ(SPI3_IRQn);			//关闭中断	
 				for(i=0,j=0;i<HADC_UseChanNum;i++)	
 				{
 					if(i!=Chan)
@@ -258,12 +258,12 @@ Bool HADC_PriReq(U16 ResSn)
 				}
 				for(;j<mSeqLen;j++)
 					HADC_NextSeq[j]=mSeqEnd;
-				EnPerIRQ(SPI2_IRQn);				//开启中断	
+				EnPerIRQ(SPI3_IRQn);				//开启中断	
 				
 			}
 			else
 			{	//2路优先级				
-				DisPerIRQ(SPI2_IRQn);			//关闭中断	
+				DisPerIRQ(SPI3_IRQn);			//关闭中断	
 				for(i=0,j=0,p=HADC_NextSeq[0];i<HADC_UseChanNum;i++)
 				{
 					if((i!=Chan)&&(i!=p))
@@ -275,7 +275,7 @@ Bool HADC_PriReq(U16 ResSn)
 				}
 				for(;j<mSeqLen;j++)
 					HADC_NextSeq[j]=mSeqEnd;
-				EnPerIRQ(SPI2_IRQn);				//开启中断	
+				EnPerIRQ(SPI3_IRQn);				//开启中断	
 				
 			}
 			return mTrue;
@@ -293,7 +293,7 @@ Bool HADC_PriReq(U16 ResSn)
 ****************************************************************************************************/
 Bool HADC_PwrChk(void)
 {
-	return (!gpio_input_bit_get(GPIOC, GPIO_PIN_9));
+	return (!LL_GPIO_IsInputPinSet(GPIOC, LL_GPIO_PIN_9));
 }
 /****************************************************************************************************
 函数名称：HADC模块检查
@@ -318,15 +318,14 @@ Bool HADC_ModuleChk(void)
 输入参数：
 返 回 值：
 其    它：
-1)TIM12的时钟为APB1的两倍，即100M。APB1为50M，APB2为100M。
-2)SPI2属于APB1的外设.时钟频率为50M。APB1为50M，APB2为100M。
+1)TIM13挂APB1，TIMPRE=4倍频，定时器内核时钟200M；PSC=2-1后为100M。PCLK1为50M，PCLK2为100M。
+2)SPI3内核时钟走D2CCIP2R复位默认pll1_q_ck=PLL1Q 400/2=200M，MBR=256分频后SCK为0.78125M。
 ****************************************************************************************************/
 void HADC_Drv_Init(void)
 {
 	volatile U32 Buff;
-	timer_parameter_struct timer_initpara;    
-    timer_oc_parameter_struct timer_ocintpara;
-    spi_parameter_struct spi_init_struct;
+	LL_GPIO_InitTypeDef GPIO_InitStruct;
+    LL_SPI_InitTypeDef spi_init_struct;
 	
 	//变量初始化
 	HADC_UseChanNum=HardConf_HADNum;			//通道数
@@ -359,111 +358,119 @@ void HADC_Drv_Init(void)
 	//SCK		  PC10
 	//MISO		PC11
 	//MOSI		PC12
-	rcu_periph_clock_enable(RCU_GPIOA);
-	rcu_periph_clock_enable(RCU_GPIOC);
-	rcu_periph_clock_enable(RCU_GPIOD);
-   	rcu_periph_clock_enable(RCU_SPI2);
-   	
-   	//PC10 复用功能	SPI_SCK
-	gpio_af_set(GPIOC, GPIO_AF_6, GPIO_PIN_10);
-    gpio_mode_set(GPIOC, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO_PIN_10);
-    gpio_output_options_set(GPIOC, GPIO_OTYPE_PP, GPIO_OSPEED_50MHZ, GPIO_PIN_10);    
-    //PC11 复用功能	SPI_MISO
-	gpio_af_set(GPIOC, GPIO_AF_6, GPIO_PIN_11);
-    gpio_mode_set(GPIOC, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO_PIN_11);
-    gpio_output_options_set(GPIOC, GPIO_OTYPE_PP, GPIO_OSPEED_50MHZ, GPIO_PIN_11);	
-    //PC12 复用功能	SPI_MOSI
-	gpio_af_set(GPIOC, GPIO_AF_6, GPIO_PIN_12);
-    gpio_mode_set(GPIOC, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO_PIN_12);
-    gpio_output_options_set(GPIOC, GPIO_OTYPE_PP, GPIO_OSPEED_50MHZ, GPIO_PIN_12);
-    //PA4	CS	输出IO
-    gpio_mode_set(GPIOA, GPIO_MODE_OUTPUT, GPIO_PUPD_PULLUP, GPIO_PIN_4);
-    gpio_output_options_set(GPIOA, GPIO_OTYPE_PP, GPIO_OSPEED_50MHZ,GPIO_PIN_4);
-	//PD0	HADC电源状态输入引脚
-	gpio_mode_set(GPIOD, GPIO_MODE_INPUT, GPIO_PUPD_NONE, GPIO_PIN_0);
+	LL_AHB4_GRP1_EnableClock(LL_AHB4_GRP1_PERIPH_GPIOA);
+	LL_AHB4_GRP1_EnableClock(LL_AHB4_GRP1_PERIPH_GPIOC);
+   	LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_SPI3);
+
+   	//PC10 复用功能	SPI3_SCK（H743 Port C：AF6=SPI3）
+	GPIO_InitStruct.Pin = LL_GPIO_PIN_10;
+	GPIO_InitStruct.Mode = LL_GPIO_MODE_ALTERNATE;
+	GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_HIGH;
+	GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
+	GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
+	GPIO_InitStruct.Alternate = LL_GPIO_AF_6;
+    LL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+    //PC11 复用功能	SPI3_MISO
+	GPIO_InitStruct.Pin = LL_GPIO_PIN_11;
+    LL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+    //PC12 复用功能	SPI3_MOSI
+	GPIO_InitStruct.Pin = LL_GPIO_PIN_12;
+    LL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+   	//PA4	CS	输出IO
+	GPIO_InitStruct.Pin = LL_GPIO_PIN_4;
+	GPIO_InitStruct.Mode = LL_GPIO_MODE_OUTPUT;
+	GPIO_InitStruct.Pull = LL_GPIO_PULL_UP;
+    LL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+	//PC9	HADC电源状态输入引脚（新板由PD0改PC9）
+	GPIO_InitStruct.Pin = LL_GPIO_PIN_9;
+	GPIO_InitStruct.Mode = LL_GPIO_MODE_INPUT;
+	GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
+	LL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 	
 	AD768x_CS_Set();
 	
-	//SPI初始化
-    spi_init_struct.trans_mode           = SPI_TRANSMODE_FULLDUPLEX;//全双工模式	
-    spi_init_struct.device_mode          = SPI_MASTER;				//SPI主机 
-    spi_init_struct.frame_size           = SPI_FRAMESIZE_16BIT;		//16位数据格式
-    spi_init_struct.clock_polarity_phase = SPI_CK_PL_LOW_PH_1EDGE;	//空闲模式下SCK为0 CPOL=0;CPHA=0,数据采样从第1个时间边沿开始
-    spi_init_struct.nss                  = SPI_NSS_SOFT;			//软件nss管理
-    spi_init_struct.prescale             = SPI_PSC_64;				//Fsck=Fpclk1/64
-    spi_init_struct.endian               = SPI_ENDIAN_MSB;			//MSB First  
-    spi_init(mHadcSPI, &spi_init_struct);
-    
-    spi_ti_mode_disable(mHadcSPI);									//禁用TI模式(摩托罗拉模式)
-    spi_i2s_interrupt_enable(mHadcSPI,SPI_I2S_INT_RBNE);			//接收中断开
-    nvic_irq_enable(SPI2_IRQn, mIRQPriorityL,mIRQPriorityL);		//配置NVIC
-    
-	spi_enable(mHadcSPI);
-	//定时器12初始化
-	rcu_periph_clock_enable(RCU_TIMER12);
-    rcu_timer_clock_prescaler_config(RCU_TIMER_PSC_MUL4);
-    timer_struct_para_init(&timer_initpara);
-    timer_deinit(TIMER12);
-    
-	timer_initpara.prescaler         = 2-1;
-    timer_initpara.alignedmode       = TIMER_COUNTER_EDGE;
-    timer_initpara.counterdirection  = TIMER_COUNTER_UP;
-    timer_initpara.period            = 0xffffffff;
-    timer_initpara.clockdivision     = TIMER_CKDIV_DIV1;
-    timer_initpara.repetitioncounter = 0;
-    timer_init(TIMER12,&timer_initpara);
-    
- 	//匹配中断设置
-    timer_channel_output_struct_para_init(&timer_ocintpara);
-    timer_ocintpara.ocpolarity  = TIMER_OC_POLARITY_HIGH;
-    timer_ocintpara.outputstate = TIMER_CCX_ENABLE;
-    timer_ocintpara.ocnpolarity  = TIMER_OCN_POLARITY_HIGH;
-    timer_ocintpara.outputnstate = TIMER_CCXN_DISABLE;
-    timer_ocintpara.ocidlestate  = TIMER_OC_IDLE_STATE_LOW;
-    timer_ocintpara.ocnidlestate = TIMER_OCN_IDLE_STATE_LOW;
-    timer_channel_output_config(TIMER12,TIMER_CH_0,&timer_ocintpara);
-    //设置通道0的比较值
-    timer_channel_output_pulse_value_config(TIMER12, TIMER_CH_0, mHADCTimer_5us);
-    timer_channel_output_mode_config(TIMER12, TIMER_CH_0, TIMER_OC_MODE_PWM0);
-    timer_channel_output_shadow_config(TIMER12, TIMER_CH_0, TIMER_OC_SHADOW_DISABLE);
-    // 启用定时器更新中断和通道0匹配中断
-    //timer_interrupt_enable(TIMERx, TIMER_INT_UP);
-    timer_interrupt_enable(TIMER12, TIMER_INT_CH0);
+	//SPI初始化（H743为新SPI IP，CFG寄存器配置，须先禁用才能写）
+	LL_SPI_Disable(mHadcSPI);
+    spi_init_struct.TransferDirection = LL_SPI_FULL_DUPLEX;	//全双工模式
+    spi_init_struct.Mode          = LL_SPI_MODE_MASTER;		//SPI主机
+    spi_init_struct.DataWidth     = LL_SPI_DATAWIDTH_16BIT;	//16位数据格式
+    spi_init_struct.ClockPolarity= LL_SPI_POLARITY_LOW;		//空闲模式下SCK为0 CPOL=0
+    spi_init_struct.ClockPhase   = LL_SPI_PHASE_1EDGE;		//CPHA=0,数据采样从第1个时间边沿开始
+    spi_init_struct.NSS          = LL_SPI_NSS_SOFT;			//软件nss管理（LL_Init内部自动置SSI=1）
+    spi_init_struct.BaudRate     = LL_SPI_BAUDRATEPRESCALER_DIV256;	//Fsck=pll1_q(PLL1Q) 200M/256=0.78125M（原Fpclk1 50M/64）
+    spi_init_struct.BitOrder     = LL_SPI_MSB_FIRST;			//MSB First
+    spi_init_struct.CRCCalculation = LL_SPI_CRCCALCULATION_DISABLE;
+    LL_SPI_Init(mHadcSPI, &spi_init_struct);
+    LL_SPI_SetTransferSize(mHadcSPI,1);		//每次CSTART固定传输1个16位帧，硬件在第16个SCK后产生EOT并停止
+
+    LL_SPI_SetStandard(mHadcSPI, LL_SPI_PROTOCOL_MOTOROLA);		//禁用TI模式(摩托罗拉模式)
+    LL_SPI_SetFIFOThreshold(mHadcSPI, LL_SPI_FIFO_TH_01DATA);	//16位单包接收阈值
+    LL_SPI_DisableNSSPulseMgt(mHadcSPI);						//软件NSS，禁止NSSP脉冲
+    LL_SPI_EnableIT_EOT(mHadcSPI);								//整帧在线上传输完成后再结束软件CS
+    NVIC_SetPriority(SPI3_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(),mIRQPriorityL,mIRQPriorityL));	//配置NVIC（抢占0/子0，分组5）
+    NVIC_EnableIRQ(SPI3_IRQn);
+
+	LL_SPI_Enable(mHadcSPI);
+	//CSTART由每次SPISendData按帧重臂，禁止跨软件CS边界连续移位
+	//TIM13初始化（GD32原工程为TIMER12）
+	LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_TIM13);
+    LL_RCC_SetTIMPrescaler(LL_RCC_TIM_PRESCALER_FOUR_TIMES);
+    LL_TIM_DeInit(TIM13);
+
+	LL_TIM_SetPrescaler(TIM13, 2U-1U);
+    LL_TIM_SetCounterMode(TIM13, LL_TIM_COUNTERMODE_UP);
+    LL_TIM_SetAutoReload(TIM13, 0xffffffffUL);
+    LL_TIM_SetClockDivision(TIM13, LL_TIM_CLOCKDIVISION_DIV1);
+    LL_TIM_GenerateEvent_UPDATE(TIM13);		//软件更新，立即加载PSC/ARR（对应GD32 timer_init末尾内置UPG）
+
+ 	//匹配中断设置（H743同地址实例为TIM13，仅1个比较通道CH1；GD32 TIMER12原用CH_0，此为实例级强制适配，中断功能等价）
+    LL_TIM_OC_ConfigOutput(TIM13,LL_TIM_CHANNEL_CH1,LL_TIM_OCPOLARITY_HIGH|LL_TIM_OCIDLESTATE_LOW);
+    LL_TIM_CC_EnableChannel(TIM13, LL_TIM_CHANNEL_CH1);		//通道输出使能（对应原CCX_ENABLE）
+    //设置CH1的比较值（等价原TIMER_CH_0的CCR）
+    LL_TIM_OC_SetCompareCH1(TIM13, mHADCTimer_5us);
+    LL_TIM_OC_SetMode(TIM13, LL_TIM_CHANNEL_CH1, LL_TIM_OCMODE_PWM1);
+    LL_TIM_OC_DisablePreload(TIM13, LL_TIM_CHANNEL_CH1);
+    // 启用CH1匹配中断（等价原TIMER_INT_CH0），5us等转换完成
+    //LL_TIM_EnableIT_UPDATE(TIM13);
+    LL_TIM_EnableIT_CC1(TIM13);
     // 配置NVIC
-    nvic_irq_enable(TIMER7_UP_TIMER12_IRQn,mIRQPriorityL,mIRQPriorityL);
-    // TIMER12 enable 
-    timer_enable(TIMER12);
-	
+    NVIC_SetPriority(TIM8_UP_TIM13_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(),mIRQPriorityL,mIRQPriorityL));
+    NVIC_EnableIRQ(TIM8_UP_TIM13_IRQn);
+    // TIM13 enable
+    LL_TIM_EnableCounter(TIM13);
+
 }
 /****************************************************************************************************
-函数名称：SPI中断和Timer3中断
+函数名称：SPI3中断和TIM13中断
 函数说明：
 输入参数：
 返 回 值：
 其    它：
-1、SPI+T12的中断周期无Ecat约25-30.1us，有Ecat约25-35.1us,平均估计在26us。其中：SPI收发约21us、SPI中断
-   程序执行用时约0.54-2.38us,T12中断约5us、T12中断程序执行用时约0.38-0.98us。
+1、SPI+TIM13的中断周期无Ecat约25-30.1us，有Ecat约25-35.1us,平均估计在26us。其中：SPI收发约21us、SPI中断
+   程序执行用时约0.54-2.38us,TIM13中断约5us、TIM13中断程序执行用时约0.38-0.98us。
 2、中断部分对CPU时间的占用约9～19%，平均估计在12%左右。
 3、通道间有一定的影响，主要是换通道后的第一次ADC。如果通道间电压相差大，影响很明显，会有8左右的偏差。
 4、AD结果精度：	经4次取平均值后，有约14位精度，50%量程的长时间跳动约4-6。
 ****************************************************************************************************/
-void SPI2_IRQHandler(void)
+void SPI3_IRQHandler(void)
 {
 	U16 RecBuff;
 	U32 i;
-	U8 Temp;	
+	U8 Temp;
 	static Bool NewSeqFlag;
-	
-	if(SPI_STAT(SPI2)&SPI_STAT_RBNE)
-	{	//SPI接收中断
-		RecBuff=SPI_DATA(SPI2);						//SPI接收数据
+
+	if(LL_SPI_IsActiveFlag_EOT(SPI3))
+	{	//一个16位SPI事务已经在线上完整结束
+		RecBuff=*((__IO U16 *)&SPI3->RXDR);					//ARMCC下必须半字访问，避免RXFIFO数据打包
+		LL_SPI_ClearFlag_EOT(SPI3);
+		LL_SPI_ClearFlag_TXTF(SPI3);
 		//启动ADC转换
-		AD768x_CS_Set();						//置高	结束本次通讯并启动ADC转换
+		AD768x_CS_Set();						//置高	结束本次通讯并启动ADC转换(EOT保证SCK已静止)
 		//开启5us定时中断	即等待5us后ADC转换完成
-		timer_interrupt_flag_clear(TIMER12, TIMER_INT_FLAG_CH0);//清除中断标志位 
+		LL_TIM_ClearFlag_CC1(TIM13);					//清除中断标志位
 		//TIMER_CH0CV(TIMER12)=TIMER_CNT(TIMER12)+mHADCTimer_5us;		//5uS匹配中断
-		TIMER_CNT(TIMER12)=0;
-		EnPerIRQ(TIMER7_UP_TIMER12_IRQn);									//开启中断
+		TIM13->CNT=0;
+		EnPerIRQ(TIM8_UP_TIM13_IRQn);									//开启中断
 		
 //		if((RecBuff==0)||(RecBuff==0xffff))
 //			ErrADCDataCnt++;					//异常数据
@@ -532,12 +539,12 @@ void SPI2_IRQHandler(void)
 		SeqChan_Next=HADC_CurrSeq[SeqCnt];
 	}
 }
-void TIMER7_UP_TIMER12_IRQHandler(void)
+void TIM8_UP_TIM13_IRQHandler(void)
 {
-	if(SET == timer_interrupt_flag_get(TIMER12, TIMER_INT_FLAG_CH0)) 
-	{	
-		timer_interrupt_flag_clear(TIMER12, TIMER_INT_FLAG_CH0);//清除中断标志位 
-		DisPerIRQ(TIMER7_UP_TIMER12_IRQn);										//关闭中断
+	if(SET == LL_TIM_IsActiveFlag_CC1(TIM13))
+	{
+		LL_TIM_ClearFlag_CC1(TIM13);					//清除中断标志位
+		DisPerIRQ(TIM8_UP_TIM13_IRQn);										//关闭中断
 		SPISendData(HADCChan_CMRTab[SeqChan_Next]);	//发下一通道
 	}
 }
@@ -552,7 +559,8 @@ void TIMER7_UP_TIMER12_IRQHandler(void)
 ****************************************************************************************************/
 void __inline SPISendData(U16 SendData)
 {
-	AD768x_CS_Clr();			//选中AD768x			开始数据发送
-	SPI_DATA(SPI2)=SendData;	//SPI发送数据
+	AD768x_CS_Clr();							//选中AD768x
+	*((__IO U16 *)&SPI3->TXDR)=SendData;		//ARMCC下强制半字写，确保TXFIFO只压入1个16位帧
+	LL_SPI_StartMasterTransfer(SPI3);			//TSIZE=1：发送16位后硬件自动停止并置EOT
 }
 
