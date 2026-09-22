@@ -21,7 +21,7 @@
 ======================================== 其   它    说   明 ========================================
 
 
-1、相关硬件：	PC7/TIM2_CH1	计数输入	Tim3
+1、相关硬件：	PC7/TIM3_CH2	计数输入
 
 2、MADC为中速ADC，更新周期20mS，最低测量电压20mV左右
 
@@ -36,18 +36,13 @@
 
 #include "Include.h"
 /*======================================== 模块内有效宏定义 =======================================*/
-#define GetVFCCount()	TIMER_CH0CV(TIMER7)			//获取VF当前计数
-#define mPwmPeriod		T1msTo10us(20)					//PWM周期时间
+#define mMadcSampleTime	T1msTo10us(20)					//AD7740 V/F计数窗口时间，非PWM周期
 #define mMadcMax		0xffff							//MADC最大值
 
 /*======================================= 模块内有效变量定义 ======================================*/
 
-static U16 CntL = 0, CntH = 0;
-static Bool MeasFlag;
-static U8	MeasStep;
-	#define	mMS_Risi	0		//等待检测上升沿
-	#define	mMS_Fall	1		//等待检测下降沿
-static G10usTimer MeasEdgeTimer;		//边沿出现超时时间
+static U16 CntLast = 0;
+static G10usTimer MADC_SampleTimer;		//MADC采样窗口计时器
 
 
 /*======================================= 模块内有效函数声明 ======================================*/
@@ -76,55 +71,52 @@ int main(void)
 其    它：
 ****************************************************************************************************/
 void MADC_Drv_Init(void)
-{	
-	timer_parameter_struct timer_initpara;    
-    timer_ic_parameter_struct timer_icinitpara;
-    
+{
+	LL_GPIO_InitTypeDef GPIO_InitStruct;
+
     if(HardConf_MADNum==0)
     	return;
-   	/* 1. 启用外设时钟 */
-    rcu_periph_clock_enable(RCU_GPIOC);	//PC6
+   	/* 1. 启用外设时钟（H743：GPIO在AHB4总线，TIM3在D2域APB1） */
+    LL_AHB4_GRP1_EnableClock(LL_AHB4_GRP1_PERIPH_GPIOC);
 
-    /* 2. 配置GPIO引脚 - PC6 (TIMER7_CH0) */
-    gpio_mode_set(GPIOC, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO_PIN_6);
-    gpio_output_options_set(GPIOC, GPIO_OTYPE_PP, GPIO_OSPEED_50MHZ, GPIO_PIN_6);
-    gpio_af_set(GPIOC, GPIO_AF_3, GPIO_PIN_6);  // TIMER7_CH0的AF3
+    /* 2. 配置GPIO引脚 - PC7 (TIM3_CH2, AF2) */
+    GPIO_InitStruct.Pin        = LL_GPIO_PIN_7;
+	GPIO_InitStruct.Mode       = LL_GPIO_MODE_ALTERNATE;
+	GPIO_InitStruct.Speed      = LL_GPIO_SPEED_FREQ_HIGH;
+	GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
+	GPIO_InitStruct.Pull       = LL_GPIO_PULL_NO;
+	GPIO_InitStruct.Alternate  = LL_GPIO_AF_2;			// TIM3_CH2的AF2
+    LL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-	rcu_periph_clock_enable(RCU_TIMER7);
-    rcu_timer_clock_prescaler_config(RCU_TIMER_PSC_MUL4);
-    timer_deinit(TIMER7);
+    LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_TIM3);
+    //rcu_timer_clock_prescaler_config(RCU_TIMER_PSC_MUL4);	//已由Time_Drv_Init()设置TIMPRE=4倍频
+    LL_TIM_DeInit(TIM3);
     /* 3. 定时器基本参数配置 */
-    timer_struct_para_init(&timer_initpara);
-    
-    timer_initpara.prescaler         = 64-1;      // 64分频   200M经64分频到3.125M	50HzPwm波分辨力达到62500	
-    timer_initpara.alignedmode       = TIMER_COUNTER_EDGE;
-    timer_initpara.counterdirection  = TIMER_COUNTER_UP;
-    timer_initpara.period            = 0xFFFFFFFF; // 32位最大值
-    timer_initpara.clockdivision     = TIMER_CKDIV_DIV1;
-    timer_initpara.repetitioncounter = 0;
-    timer_init(TIMER7, &timer_initpara);
+    /* AD7740输出为V/F脉冲，定时器直接对PC7上升沿计数 */
+    LL_TIM_DisableCounter(TIM3);
+    LL_TIM_DisableIT_CC2(TIM3);
+    LL_TIM_SetPrescaler(TIM3, 0U);
+    LL_TIM_SetCounterMode(TIM3, LL_TIM_COUNTERMODE_UP);
+    LL_TIM_SetAutoReload(TIM3, 0xFFFFU);			// 16位定时器
+    LL_TIM_SetClockDivision(TIM3, LL_TIM_CLOCKDIVISION_DIV1);
+	LL_TIM_GenerateEvent_UPDATE(TIM3);					//软件更新，立即加载PSC/ARR
 
-    /* 4. 配置输入捕获 */
-    timer_channel_input_struct_para_init(&timer_icinitpara);
-    
-    MeasStep=mMS_Risi;
-    timer_icinitpara.icpolarity  = TIMER_IC_POLARITY_RISING; // 上升沿计数
-    timer_icinitpara.icselection = TIMER_IC_SELECTION_DIRECTTI;
-    timer_icinitpara.icprescaler = TIMER_IC_PSC_DIV1;
-    timer_icinitpara.icfilter    = 0;  // 无滤波
-    
-    timer_input_capture_config(TIMER7, TIMER_CH_0, &timer_icinitpara);
-	MeasStep = mMS_Risi;
-	
-    // 配置输入捕获中断
-    timer_interrupt_flag_clear(TIMER7, TIMER_INT_FLAG_CH0);
-    timer_interrupt_enable(TIMER7, TIMER_INT_CH0);
-    nvic_irq_enable(TIMER7_Channel_IRQn, mIRQPriorityL, mIRQPriorityL);
+    /* 4. 配置CH2为外部时钟输入（TI2上升沿计数） */
+    LL_TIM_IC_SetPolarity(TIM3, LL_TIM_CHANNEL_CH2, LL_TIM_IC_POLARITY_RISING);
+    LL_TIM_IC_SetActiveInput(TIM3, LL_TIM_CHANNEL_CH2, LL_TIM_ACTIVEINPUT_DIRECTTI);
+    LL_TIM_IC_SetFilter(TIM3, LL_TIM_CHANNEL_CH2, LL_TIM_IC_FILTER_FDIV1);		// 无滤波
+    LL_TIM_IC_SetPrescaler(TIM3, LL_TIM_CHANNEL_CH2, LL_TIM_ICPSC_DIV1);
+    LL_TIM_SetTriggerInput(TIM3, LL_TIM_TS_TI2FP2);
+    LL_TIM_SetClockSource(TIM3, LL_TIM_CLOCKSOURCE_EXT_MODE1);
+    LL_TIM_CC_EnableChannel(TIM3, LL_TIM_CHANNEL_CH2);	//开启外部时钟输入通道
+    LL_TIM_ClearFlag_UPDATE(TIM3);
+    LL_TIM_SetCounter(TIM3, 0U);
 
     /* 6. 启用定时器 */
-    timer_enable(TIMER7);
-    
-    G10usTimerRes(&MeasEdgeTimer);
+    LL_TIM_EnableCounter(TIM3);
+
+    CntLast=(U16)TIM3->CNT;
+    G10usTimerRes(&MADC_SampleTimer);
 }
 /****************************************************************************************************
 函数名称：中断处理计数值
@@ -133,39 +125,9 @@ void MADC_Drv_Init(void)
 返 回 值：
 其    它：
 ****************************************************************************************************/
-void TIMER7_Channel_IRQHandler(void)
+void TIM3_IRQHandler(void)
 {
-	static U16 CntRisi,CntFall;
-	static U16 CL;
-    if(timer_interrupt_flag_get(TIMER7, TIMER_INT_FLAG_CH0))
-    {
-        timer_interrupt_flag_clear(TIMER7, TIMER_INT_FLAG_CH0);
-       	
-       	G10usTimerRes(&MeasEdgeTimer);
-        switch(MeasStep)
-        {
-        case mMS_Risi: // 捕获上升沿
-           
-            CntRisi = TIMER_CH0CV(TIMER7);
-            CL=CntRisi-CntFall;
-            //设置成下降沿捕获
-            TIMER_CHCTL2(TIMER7) &= (~(U32)(TIMER_CHCTL2_CH0P | TIMER_CHCTL2_CH0NP));
-        	TIMER_CHCTL2(TIMER7) |= (U32)((U32)(TIMER_IC_POLARITY_FALLING) << 0U);
-            MeasStep = mMS_Fall;
-            break;
-
-        case mMS_Fall: // 捕获下降沿
-            CntFall = TIMER_CH0CV(TIMER7);
-            CntH=CntFall-CntRisi;
-            //设置成上升沿捕获
-            TIMER_CHCTL2(TIMER7) &= (~(U32)(TIMER_CHCTL2_CH0P | TIMER_CHCTL2_CH0NP));
-        	TIMER_CHCTL2(TIMER7) |= (U32)((U32)(TIMER_IC_POLARITY_RISING) << 0U);
-        	MeasStep = mMS_Risi;
-            CntL=CL;
-            MeasFlag=mTrue;
-            break;
-        }
-    }
+	/* 外部时钟模式下由TIM3硬件累计PC7脉冲，此处无需处理捕获中断。 */
 }
 /****************************************************************************************************
 函数名称：MADC数据采集处理
@@ -178,23 +140,39 @@ void TIMER7_Channel_IRQHandler(void)
 void MADC_Drv_Pcs(void)
 {
 	U32 Temp;
+	U32 SampleTime;
+	U16 CntNow;
+	U16 CntNum;
 	
 	 if(HardConf_MADNum==0)
     	return;
-    if(G10usTimerOver(&MeasEdgeTimer,mPwmPeriod*3/2))
-    {	//1.5倍PWM周期未检测到边沿，认为全高或全低
-    	if(GPIO_ISTAT(GPIOC)&mBit6)
-    		WrResU32(HardConf[mHard_HAD09],0xffff);
-    	else
-    		WrResU32(HardConf[mHard_HAD09],0x0000);
-    }
-    else if(MeasFlag)
+    if(G10usTimerOver(&MADC_SampleTimer,mMadcSampleTime))
     {
-    	MeasFlag=mFalse;
-    	Temp=((U32)CntH)<<16;
-    	Temp/=((U32)CntL+(U32)CntH);
-        Temp=Temp*2013/1000;    //电阻比值  3.3参考，分压5.1K/1K
-        if(Temp>mMADC_DataMax)
+    	SampleTime=G10usTimerCal(&MADC_SampleTimer);
+    	CntNow=(U16)TIM3->CNT;
+    	CntNum=(U16)(CntNow-CntLast);				//U16减法自动处理16位回绕
+    	CntLast=CntNow;
+    	G10usTimerRes(&MADC_SampleTimer);
+
+    	if(CntNum==0)
+    	{	//无脉冲时，按输入电平区分全高或全低
+    		if(LL_GPIO_IsInputPinSet(GPIOC,LL_GPIO_PIN_7))
+    			Temp=mMadcMax;
+    		else
+    			Temp=0;
+    	}
+    	else if(CntNum<=SampleTime)
+    	{	//AD7740最低输出100kHz，对应Cnt=Tc，低于基线按0处理
+    		Temp=0;
+    	}
+    	else
+    	{
+			/* AD7740: 100kHz~900kHz对应0~2.5V，映射为0~10V的16位数据 */
+    		/* f=Cnt*100kHz/Tc，故Data=(Cnt-Tc)*65535/(8*Tc) */
+    		Temp=(U32)(((U64)(CntNum-SampleTime)*mMadcMax)/(SampleTime*8U));
+    	}
+
+		if(Temp>mMADC_DataMax)
         	WrResU32(HardConf[mHard_HAD09],mMADC_DataMax);
         else
     		WrResU32(HardConf[mHard_HAD09],Temp);
